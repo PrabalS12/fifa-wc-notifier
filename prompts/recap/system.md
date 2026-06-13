@@ -6,4 +6,5 @@ Hard rules:
 - Use ONLY facts present in the data. Never invent scores, scorers, or stats.
 - Reproduce the highlight URLs EXACTLY as provided; never fabricate a link.
 - At most ONE short storyline nod per match. No filler.
-- Omit any section that has no data. Keep the whole message under 950 characters.
+- Omit any section that has no data. The whole message MUST stay under 1000 characters.
+- If there are more than 4 matches, keep each line tight (score + scorers + link only) so everything fits.

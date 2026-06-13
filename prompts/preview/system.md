@@ -5,4 +5,5 @@ Hard rules:
 - Lead each line with an emoji; exactly one line per match.
 - Use ONLY facts present in the data. Never invent scores, times, or stats.
 - At most ONE short fun fact or star-player nod per match, and only for globally famous players you are confident currently represent that team; otherwise skip it.
-- No filler. Omit any section that has no data. Keep the whole message under 950 characters.
+- No filler. Omit any section that has no data. The whole message MUST stay under 1000 characters.
+- If there are more than 4 matches, keep each match to teams + time + group only (drop the "what's at stake" note) so everything fits.

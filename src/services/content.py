@@ -14,7 +14,16 @@ from src.models import Fixture, GroupStanding, MatchResult
 from src.services.prompts import load
 
 logger = get_logger(__name__)
-MAX_CHARS = 950
+MAX_CHARS = 1024  # WhatsApp template body-parameter ceiling
+
+
+def _clip(text: str) -> str:
+    """Trim to MAX_CHARS at a line boundary so it never cuts mid-word."""
+    if len(text) <= MAX_CHARS:
+        return text
+    head = text[:MAX_CHARS]
+    cut = head.rfind("\n")
+    return head[:cut].rstrip() if cut > 0 else head.rstrip()
 
 
 class ContentWriter:
@@ -55,7 +64,7 @@ class ContentWriter:
                     thinking_config=types.ThinkingConfig(thinking_level="MEDIUM"),
                 ),
             )
-            return (resp.text or "").strip()[:MAX_CHARS]
+            return _clip((resp.text or "").strip())
         except Exception:  # noqa: BLE001 — an LLM failure must not block delivery
             logger.warning("Gemini generation failed; using fallback", exc_info=True)
             return ""
@@ -85,4 +94,4 @@ def _fallback(
         snapshot = " · ".join(f"{row.team} {row.points}" for row in group.table[:4])
         if snapshot:
             lines.append(f"📊 {group.group}: {snapshot}")
-    return "\n".join(lines)[:MAX_CHARS]
+    return _clip("\n".join(lines))
