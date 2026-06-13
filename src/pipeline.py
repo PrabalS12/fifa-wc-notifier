@@ -18,14 +18,15 @@ logger = get_logger(__name__)
 class Notifier:
     """Builds and sends one preview or recap message."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, dry_run: bool = False) -> None:
         self._settings = settings
+        self._dry_run = dry_run
         self._football = FootballClient(settings.football_data_api_key)
         self._whatsapp = WhatsAppClient(settings)
         self._writer = ContentWriter(settings)
 
     def run(self, mode: str) -> None:
-        """Gather data for `mode`, compose the message, and deliver it."""
+        """Gather data for `mode`, compose the message, and deliver it (or print, if dry-run)."""
         now = dt.datetime.now(dt.UTC)
         date_label = now.astimezone(IST).strftime("%a, %d %b")
         try:
@@ -35,6 +36,11 @@ class Notifier:
         except Exception as exc:  # noqa: BLE001 — degrade to a short note rather than go silent
             logger.exception("failed to build %s message", mode)
             text = f"⚽ WC {mode} update unavailable ({exc.__class__.__name__}). Back soon!"
+
+        if self._dry_run:
+            logger.info("dry-run — message not sent:")
+            print(f"\n{'─' * 48}\n{text}\n{'─' * 48}\n")
+            return
 
         self._whatsapp.send(text)
         logger.info("sent %s message (%d chars)", mode, len(text))

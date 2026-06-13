@@ -17,6 +17,12 @@ class WhatsAppClient:
 
     def send(self, text: str) -> dict:
         """Send `text` to the configured recipient. Raises on a non-2xx response."""
+        s = self._settings
+        if not (s.whatsapp_token and s.whatsapp_phone_number_id and s.whatsapp_recipient):
+            raise RuntimeError(
+                "WhatsApp credentials missing (token / phone_number_id / recipient). "
+                "Set them, or use --dry-run."
+            )
         url = f"{GRAPH}/{self._settings.whatsapp_phone_number_id}/messages"
         headers = {
             "Authorization": f"Bearer {self._settings.whatsapp_token}",

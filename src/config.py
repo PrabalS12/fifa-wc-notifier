@@ -14,9 +14,10 @@ class Settings(BaseSettings):
     gemini_api_key: str
     gemini_model: str = "gemini-3-flash-preview"
 
-    whatsapp_token: str
-    whatsapp_phone_number_id: str
-    whatsapp_recipient: str
+    # Optional so --dry-run works with only the data + LLM keys; required for a real send.
+    whatsapp_token: str = ""
+    whatsapp_phone_number_id: str = ""
+    whatsapp_recipient: str = ""
     whatsapp_template_name: str = "wc_update"
     whatsapp_template_lang: str = "en_US"
     # Set to false only for local testing inside an open 24h window (sends free-form text).

@@ -18,10 +18,13 @@ def main() -> None:
     """Parse the mode argument and run one notification."""
     parser = argparse.ArgumentParser(description="FIFA World Cup 2026 WhatsApp notifier")
     parser.add_argument("mode", choices=("preview", "recap"), help="which daily update to send")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="print the message instead of sending it"
+    )
     args = parser.parse_args()
 
     log.setup()
-    Notifier(get_settings()).run(args.mode)
+    Notifier(get_settings(), dry_run=args.dry_run).run(args.mode)
 
 
 if __name__ == "__main__":
