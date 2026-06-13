@@ -43,7 +43,12 @@ class Notifier:
             return
 
         self._whatsapp.send(text)
-        logger.info("sent %s message (%d chars)", mode, len(text))
+        logger.info(
+            "sent %s to %d recipient(s) (%d chars)",
+            mode,
+            len(self._settings.whatsapp_recipients),
+            len(text),
+        )
 
     def _gather(self, mode: str, now: dt.datetime) -> list[Fixture] | list[MatchResult]:
         if mode == "preview":
