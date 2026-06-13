@@ -14,11 +14,30 @@ your own verified number). Content is written by **Gemini** from live football d
 ## How it works
 
 ```
-GitHub Actions cron ──> python -m fifa_wc {preview|recap}
-                          ├─ football.py  (football-data.org: fixtures, results, standings)
-                          ├─ youtube.py   (highlight links)
-                          ├─ content.py   (Gemini -> engaging message, deterministic fallback)
-                          └─ whatsapp.py  (Meta Cloud API send)
+GitHub Actions cron ──> python main.py {preview|recap}
+                              │
+                              └─ src/pipeline.py  (gather → compose → deliver)
+                                   ├─ clients/football.py   (football-data.org: fixtures, results, standings)
+                                   ├─ clients/youtube.py    (highlight links)
+                                   ├─ clients/whatsapp.py   (Meta Cloud API send)
+                                   └─ services/content.py   (Gemini → message; prompts/ as .md; fallback)
+```
+
+## Project structure
+
+```
+fifa-wc/
+├── main.py                 # entry point: python main.py {preview|recap}
+├── prompts/                # LLM prompts as markdown (system + user per mode)
+│   ├── preview/{system,user}.md
+│   └── recap/{system,user}.md
+└── src/
+    ├── config.py           # pydantic-settings (env vars / .env)
+    ├── models.py           # Fixture, MatchResult, GroupStanding, TeamStanding
+    ├── pipeline.py         # Notifier — orchestration
+    ├── log.py
+    ├── clients/            # external I/O: football-data.org, WhatsApp, YouTube
+    └── services/           # prompt loading + content composition (Gemini)
 ```
 
 ## Setup
@@ -48,10 +67,9 @@ GitHub Actions cron ──> python -m fifa_wc {preview|recap}
 
 ```bash
 uv sync
-cp .env.example .env   # fill in values
-set -a; source .env; set +a
-uv run python -m fifa_wc preview
-uv run python -m fifa_wc recap
+cp .env.example .env   # fill in values (loaded automatically by pydantic-settings)
+uv run python main.py preview
+uv run python main.py recap
 ```
 
 Tip: to test without an approved template, message your bot first (opens a 24h window), set
