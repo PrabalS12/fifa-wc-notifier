@@ -5,7 +5,7 @@ from __future__ import annotations
 import datetime as dt
 from dataclasses import replace
 
-from src.clients import FootballClient, WhatsAppClient, highlights_url
+from src.clients import FootballData, WhatsAppClient, highlights_url
 from src.clients.football import IST
 from src.config import Settings
 from src.log import get_logger
@@ -16,38 +16,39 @@ logger = get_logger(__name__)
 
 
 class Notifier:
-    """Builds and sends one preview or recap message."""
+    """Builds and sends one preview or recap (as one or more WhatsApp messages)."""
 
     def __init__(self, settings: Settings, dry_run: bool = False) -> None:
         self._settings = settings
         self._dry_run = dry_run
-        self._football = FootballClient(settings.football_data_api_key)
+        self._football = FootballData()
         self._whatsapp = WhatsAppClient(settings)
         self._writer = ContentWriter(settings)
 
     def run(self, mode: str) -> None:
-        """Gather data for `mode`, compose the message, and deliver it (or print, if dry-run)."""
+        """Gather data for `mode`, compose the messages, and deliver them (or print, if dry-run)."""
         now = dt.datetime.now(dt.UTC)
         date_label = now.astimezone(IST).strftime("%a, %d %b")
         try:
             matches = self._gather(mode, now)
             standings = self._football.standings(_group_labels(matches))
-            text = self._writer.build(mode, date_label, matches, standings)
+            messages = self._writer.build(mode, date_label, matches, standings)
         except Exception as exc:  # noqa: BLE001 — degrade to a short note rather than go silent
             logger.exception("failed to build %s message", mode)
-            text = f"⚽ WC {mode} update unavailable ({exc.__class__.__name__}). Back soon!"
+            messages = [f"⚽ WC {mode} update unavailable ({exc.__class__.__name__}). Back soon!"]
 
         if self._dry_run:
-            logger.info("dry-run — message not sent:")
-            print(f"\n{'─' * 48}\n{text}\n{'─' * 48}\n")
+            logger.info("dry-run — %d message(s) not sent:", len(messages))
+            for i, msg in enumerate(messages, 1):
+                print(f"\n──────── message {i}/{len(messages)} ────────\n{msg}")
             return
 
-        self._whatsapp.send(text)
+        self._whatsapp.send(messages)
         logger.info(
-            "sent %s to %d recipient(s) (%d chars)",
+            "sent %s (%d message(s)) to %d recipient(s)",
             mode,
+            len(messages),
             len(self._settings.whatsapp_recipients),
-            len(text),
         )
 
     def _gather(self, mode: str, now: dt.datetime) -> list[Fixture] | list[MatchResult]:

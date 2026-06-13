@@ -11,7 +11,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Secrets and tunables. Field names map to UPPER_SNAKE_CASE env vars."""
 
-    football_data_api_key: str
     gemini_api_key: str
     gemini_model: str = "gemini-3.1-flash-lite"
 

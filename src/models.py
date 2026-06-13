@@ -1,8 +1,8 @@
-"""Domain models passed between clients, content, and delivery."""
+"""Domain models passed between the data client, content, and delivery."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -13,6 +13,17 @@ class Fixture:
     away: str
     group: str
     kickoff_ist: str
+    venue: str = ""
+
+
+@dataclass(frozen=True)
+class Goal:
+    """A single goal in a finished match."""
+
+    scorer: str
+    minute: str
+    side: str  # "home" or "away"
+    note: str = ""  # "P" (penalty), "OG" (own goal), or ""
 
 
 @dataclass(frozen=True)
@@ -22,8 +33,8 @@ class MatchResult:
     home: str
     away: str
     score: str
-    scorers: list[str]
-    group: str
+    goals: list[Goal] = field(default_factory=list)
+    group: str = ""
     highlights_url: str = ""
 
 
@@ -33,8 +44,8 @@ class TeamStanding:
 
     team: str
     played: int
-    points: int
     goal_difference: int
+    points: int
 
 
 @dataclass(frozen=True)

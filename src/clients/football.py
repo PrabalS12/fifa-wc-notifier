@@ -1,4 +1,8 @@
-"""football-data.org v4 client for the FIFA World Cup (competition code: WC)."""
+"""World Cup data client.
+
+Backed by ESPN's public soccer JSON feed (no key, current, no season limits).
+The provider is an internal detail; callers only see domain models.
+"""
 
 from __future__ import annotations
 
@@ -7,129 +11,153 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-from src.models import Fixture, GroupStanding, MatchResult, TeamStanding
+from src.models import Fixture, Goal, GroupStanding, MatchResult, TeamStanding
 
-BASE = "https://api.football-data.org/v4"
-COMPETITION = "WC"
+_BASE = "https://site.api.espn.com/apis"
+_SCOREBOARD = f"{_BASE}/site/v2/sports/soccer/fifa.world/scoreboard"
+_STANDINGS = f"{_BASE}/v2/sports/soccer/fifa.world/standings"
+_SEASON = 2026
 IST = ZoneInfo("Asia/Kolkata")
-UPCOMING_STATUSES = {"SCHEDULED", "TIMED"}
 
 
-class FootballClient:
-    """Thin synchronous wrapper over the football-data.org REST API."""
+class FootballData:
+    """Reads World Cup fixtures, results, and standings."""
 
-    def __init__(self, api_key: str) -> None:
-        self._headers = {"X-Auth-Token": api_key}
+    def __init__(self, season: int = _SEASON) -> None:
+        self._season = season
+        self._group_by_team: dict[str, str] | None = None
+
+    # --- public API -------------------------------------------------------
 
     def upcoming_fixtures(self, now: dt.datetime) -> list[Fixture]:
-        """Fixtures kicking off within the next ~30h (i.e. overnight IST)."""
-        lower, upper = now - dt.timedelta(hours=1), now + dt.timedelta(hours=30)
-        raw = self._matches(
-            (now - dt.timedelta(hours=6)).date(), (now + dt.timedelta(days=2)).date()
-        )
-        fixtures = [
-            Fixture(
-                home=_team(m, "homeTeam"),
-                away=_team(m, "awayTeam"),
-                group=_group(m),
-                kickoff_ist=_to_ist(_kickoff(m)),
+        """Matches kicking off between now (9 PM IST) and ~11 AM IST next day."""
+        lower, upper = now - dt.timedelta(hours=1), now + dt.timedelta(hours=14)
+        fixtures = []
+        for event in self._events_between(now, now + dt.timedelta(days=2)):
+            kickoff = _kickoff(event)
+            if event["status"]["type"]["state"] != "pre" or not lower <= kickoff <= upper:
+                continue
+            home, away = _sides(event)
+            fixtures.append(
+                Fixture(
+                    home=home["team"]["displayName"],
+                    away=away["team"]["displayName"],
+                    group=self._group_of(home["team"]["displayName"]),
+                    kickoff_ist=_to_ist(kickoff),
+                    venue=_venue(event),
+                )
             )
-            for m in raw
-            if m.get("status") in UPCOMING_STATUSES and lower <= _kickoff(m) <= upper
-        ]
         return sorted(fixtures, key=lambda f: f.kickoff_ist)
 
     def recent_results(self, now: dt.datetime) -> list[MatchResult]:
-        """Matches that finished within roughly the last 30h (highlight links added later)."""
-        cutoff = now - dt.timedelta(hours=30)
+        """Finished matches from the overnight window (~9 PM IST prev day to 11 AM IST)."""
+        cutoff = now - dt.timedelta(hours=14)
         results = []
-        for m in self._matches((now - dt.timedelta(days=2)).date(), now.date()):
-            if m.get("status") != "FINISHED" or _kickoff(m) < cutoff:
+        for event in self._events_between(now - dt.timedelta(days=2), now):
+            if event["status"]["type"]["state"] != "post" or _kickoff(event) < cutoff:
                 continue
-            full = m.get("score", {}).get("fullTime", {})
+            home, away = _sides(event)
             results.append(
                 MatchResult(
-                    home=_team(m, "homeTeam"),
-                    away=_team(m, "awayTeam"),
-                    score=f"{full.get('home', '?')}-{full.get('away', '?')}",
-                    scorers=self._scorers(m["id"]),
-                    group=_group(m),
+                    home=home["team"]["displayName"],
+                    away=away["team"]["displayName"],
+                    score=f"{home.get('score', '?')}-{away.get('score', '?')}",
+                    goals=_goals(event, home["id"]),
+                    group=self._group_of(home["team"]["displayName"]),
                 )
             )
         return results
 
     def standings(self, groups: set[str]) -> list[GroupStanding]:
-        """Group tables, filtered to the given group labels (empty set -> no call)."""
+        """Group tables, filtered to the given group labels (empty set -> nothing)."""
         if not groups:
             return []
-        data = self._get(f"/competitions/{COMPETITION}/standings")
-        tables = []
-        for s in data.get("standings", []):
-            if s.get("type") != "TOTAL":
-                continue
-            label = _label(s.get("group") or s.get("stage"))
-            if label not in groups:
-                continue
-            tables.append(
-                GroupStanding(
-                    group=label,
-                    table=[
-                        TeamStanding(
-                            team=row["team"]["name"],
-                            played=row["playedGames"],
-                            points=row["points"],
-                            goal_difference=row["goalDifference"],
-                        )
-                        for row in s.get("table", [])
-                    ],
-                )
-            )
-        return tables
+        return [g for g in self._all_standings() if g.group in groups]
 
     # --- internal ---------------------------------------------------------
 
-    def _get(self, path: str, params: dict | None = None) -> dict:
-        resp = requests.get(f"{BASE}{path}", headers=self._headers, params=params, timeout=30)
+    def _get(self, url: str, params: dict | None = None) -> dict:
+        resp = requests.get(url, params=params, timeout=30)
         resp.raise_for_status()
         return resp.json()
 
-    def _matches(self, date_from: dt.date, date_to: dt.date) -> list[dict]:
-        data = self._get(
-            f"/competitions/{COMPETITION}/matches",
-            {"dateFrom": date_from.isoformat(), "dateTo": date_to.isoformat()},
-        )
-        return data.get("matches", [])
+    def _events_between(self, start: dt.datetime, end: dt.datetime) -> list[dict]:
+        events: list[dict] = []
+        day = start.date()
+        while day <= end.date():
+            data = self._get(_SCOREBOARD, {"dates": day.strftime("%Y%m%d")})
+            events.extend(data.get("events", []))
+            day += dt.timedelta(days=1)
+        return events
 
-    def _scorers(self, match_id: int) -> list[str]:
-        """Best-effort goal scorers; the free tier may omit them, returning []."""
-        try:
-            goals = self._get(f"/matches/{match_id}").get("goals") or []
-        except requests.RequestException:
-            return []
-        scorers = []
-        for goal in goals:
-            name = (goal.get("scorer") or {}).get("name")
-            if name:
-                minute = goal.get("minute")
-                scorers.append(f"{name} {minute}'" if minute else name)
-        return scorers
+    def _all_standings(self) -> list[GroupStanding]:
+        data = self._get(_STANDINGS, {"season": self._season})
+        groups = []
+        for child in data.get("children", []):
+            entries = child.get("standings", {}).get("entries", [])
+            table = sorted(
+                (_standing_row(e) for e in entries),
+                key=lambda r: (r.points, r.goal_difference, r.team),
+                reverse=True,
+            )
+            groups.append(GroupStanding(group=child.get("name", ""), table=table))
+        return groups
+
+    def _group_of(self, team: str) -> str:
+        if self._group_by_team is None:
+            self._group_by_team = {
+                row.team: g.group for g in self._all_standings() for row in g.table
+            }
+        return self._group_by_team.get(team, "")
 
 
-def _kickoff(match: dict) -> dt.datetime:
-    return dt.datetime.fromisoformat(match["utcDate"].replace("Z", "+00:00"))
+def _sides(event: dict) -> tuple[dict, dict]:
+    competitors = event["competitions"][0]["competitors"]
+    home = next(c for c in competitors if c["homeAway"] == "home")
+    away = next(c for c in competitors if c["homeAway"] == "away")
+    return home, away
+
+
+def _venue(event: dict) -> str:
+    return event["competitions"][0].get("venue", {}).get("fullName", "")
+
+
+def _kickoff(event: dict) -> dt.datetime:
+    return dt.datetime.fromisoformat(event["date"].replace("Z", "+00:00"))
 
 
 def _to_ist(when: dt.datetime) -> str:
     return when.astimezone(IST).strftime("%I:%M %p").lstrip("0") + " IST"
 
 
-def _team(match: dict, side: str) -> str:
-    return match[side].get("name") or "TBD"
+def _goals(event: dict, home_id: str) -> list[Goal]:
+    goals = []
+    for detail in event["competitions"][0].get("details", []):
+        if not detail.get("scoringPlay"):
+            continue
+        athletes = detail.get("athletesInvolved") or []
+        scorer = athletes[0]["displayName"] if athletes else detail.get("type", {}).get("text", "")
+        kind = detail.get("type", {}).get("text", "")
+        goals.append(
+            Goal(
+                scorer=scorer,
+                minute=detail.get("clock", {}).get("displayValue", ""),
+                side="home" if str(detail.get("team", {}).get("id")) == str(home_id) else "away",
+                note="OG" if "Own" in kind else ("P" if "Penalty" in kind else ""),
+            )
+        )
+    return goals
 
 
-def _label(raw: str | None) -> str:
-    return (raw or "").replace("_", " ").title()
+def _standing_row(entry: dict) -> TeamStanding:
+    stats = {s["name"]: s for s in entry.get("stats", [])}
 
+    def val(name: str) -> int:
+        return int(stats.get(name, {}).get("value", 0))
 
-def _group(match: dict) -> str:
-    return _label(match.get("group") or match.get("stage"))
+    return TeamStanding(
+        team=entry["team"]["displayName"],
+        played=val("gamesPlayed"),
+        goal_difference=val("pointDifferential"),
+        points=val("points"),
+    )

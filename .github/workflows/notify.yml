@@ -40,7 +40,6 @@ jobs:
       - name: Send notification
         run: uv run python main.py ${{ steps.mode.outputs.value }}
         env:
-          FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
           WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}

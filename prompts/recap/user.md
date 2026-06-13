@@ -1,12 +1,16 @@
-Write a RECAP of the matches that just finished, for $date.
+Write the RECAP for $date.
 
-Layout:
-☀️ MORNING RECAP — $date
-Then one line per match:
-<Team A> <score> <Team B> · ⚡ <scorers, or 'no goals'> · ▶️ <highlights_url>
-Then an updated standings snapshot for the groups provided:
-📊 <Group>: <Team> <pts> · ...
-End with one sharp storyline takeaway.
+Begin with:
+☀️ *MORNING RECAP* — $date
+
+Then one block per match:
+<flag> *<Home> <score> <Away>* <flag>
+⚽ <home scorers> | <away scorers>
+▶️ <highlights_url>
+
+Then exactly:
+[[FACT]]
+🔥 <one storyline or fun fact>
 
 Data (JSON):
 $data

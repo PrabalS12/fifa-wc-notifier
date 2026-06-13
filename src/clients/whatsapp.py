@@ -15,8 +15,10 @@ class WhatsAppClient:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def send(self, text: str) -> list[dict]:
-        """Send `text` to every configured recipient. Raises on the first non-2xx response."""
+    def send(self, messages: str | list[str]) -> list[dict]:
+        """Send each message to every recipient, in order. Raises on the first non-2xx."""
+        if isinstance(messages, str):
+            messages = [messages]
         s = self._settings
         if not (s.whatsapp_token and s.whatsapp_phone_number_id and s.whatsapp_recipients):
             raise RuntimeError(
@@ -30,13 +32,14 @@ class WhatsAppClient:
         }
         responses = []
         for recipient in s.whatsapp_recipients:
-            payload = self._payload(text, recipient)
-            resp = requests.post(url, headers=headers, json=payload, timeout=30)
-            if resp.status_code >= 300:
-                raise RuntimeError(
-                    f"WhatsApp send to {recipient} failed [{resp.status_code}]: {resp.text}"
-                )
-            responses.append(resp.json())
+            for text in messages:
+                payload = self._payload(text, recipient)
+                resp = requests.post(url, headers=headers, json=payload, timeout=30)
+                if resp.status_code >= 300:
+                    raise RuntimeError(
+                        f"WhatsApp send to {recipient} failed [{resp.status_code}]: {resp.text}"
+                    )
+                responses.append(resp.json())
         return responses
 
     def _payload(self, text: str, recipient: str) -> dict:
