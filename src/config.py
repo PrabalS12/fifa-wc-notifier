@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     football_data_api_key: str
     gemini_api_key: str
-    gemini_model: str = "gemini-3.1-flash-lite-preview"
+    gemini_model: str = "gemini-3.1-flash-lite"
 
     # Optional so --dry-run works with only the data + LLM keys; required for a real send.
     whatsapp_token: str = ""
