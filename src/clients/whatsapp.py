@@ -6,7 +6,7 @@ import requests
 
 from src.config import Settings
 
-GRAPH = "https://graph.facebook.com/v21.0"
+GRAPH = "https://graph.facebook.com/v25.0"
 
 
 class WhatsAppClient:
