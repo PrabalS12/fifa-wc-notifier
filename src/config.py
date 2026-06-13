@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     whatsapp_phone_number_id: str = ""
     # One number, or several comma-separated, e.g. "9198...,9199...".
     whatsapp_recipient: str = ""
-    whatsapp_template_name: str = "wc_update"
+    whatsapp_template_name: str = "wc_daily"
     whatsapp_template_lang: str = "en_US"
     # Set to false only for local testing inside an open 24h window (sends free-form text).
     whatsapp_use_template: bool = True
