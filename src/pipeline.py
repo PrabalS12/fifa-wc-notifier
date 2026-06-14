@@ -1,22 +1,22 @@
-"""Orchestrates a single notification run: gather -> compose -> deliver."""
+"""Orchestrates a single notification run: gather -> render card -> deliver image."""
 
 from __future__ import annotations
 
 import datetime as dt
-from dataclasses import replace
+from pathlib import Path
 
-from src.clients import FootballData, WhatsAppClient, highlights_url
+from src.clients import FootballData, WhatsAppClient
 from src.clients.football import IST
 from src.config import Settings
 from src.log import get_logger
 from src.models import Fixture, MatchResult
-from src.services import ContentWriter
+from src.services import ContentWriter, build_preview_card, build_recap_card, render_card
 
 logger = get_logger(__name__)
 
 
 class Notifier:
-    """Builds and sends one preview or recap (as one or more WhatsApp messages)."""
+    """Builds and sends one preview or recap image card."""
 
     def __init__(self, settings: Settings, dry_run: bool = False) -> None:
         self._settings = settings
@@ -26,39 +26,39 @@ class Notifier:
         self._writer = ContentWriter(settings)
 
     def run(self, mode: str) -> None:
-        """Gather data for `mode`, compose the messages, and deliver them (or print, if dry-run)."""
+        """Gather data for `mode`, render the card, and deliver it (or save it, if dry-run)."""
         now = dt.datetime.now(dt.UTC)
         date_label = now.astimezone(IST).strftime("%a, %d %b")
-        try:
-            matches = self._gather(mode, now)
-            standings = self._football.standings(_group_labels(matches))
-            messages = self._writer.build(mode, date_label, matches, standings)
-        except Exception as exc:  # noqa: BLE001 — degrade to a short note rather than go silent
-            logger.exception("failed to build %s message", mode)
-            messages = [f"⚽ WC {mode} update unavailable ({exc.__class__.__name__}). Back soon!"]
 
-        if self._dry_run:
-            logger.info("dry-run — %d message(s) not sent:", len(messages))
-            for i, msg in enumerate(messages, 1):
-                print(f"\n──────── message {i}/{len(messages)} ────────\n{msg}")
+        matches, card = self._build(mode, date_label, now)
+        if not matches:
+            logger.info("no matches for %s — nothing to send", mode)
             return
 
-        self._whatsapp.send(messages)
-        logger.info(
-            "sent %s (%d message(s)) to %d recipient(s)",
-            mode,
-            len(messages),
-            len(self._settings.whatsapp_recipients),
-        )
+        png = render_card(card)
 
-    def _gather(self, mode: str, now: dt.datetime) -> list[Fixture] | list[MatchResult]:
+        if self._dry_run:
+            out = Path("samples") / f"{mode}_card.png"
+            out.parent.mkdir(exist_ok=True)
+            out.write_bytes(png)
+            logger.info("dry-run — wrote %s (%d bytes)", out, len(png))
+            return
+
+        media_id = self._whatsapp.upload_media(png)
+        self._whatsapp.send_image(media_id)
+        count = len(self._settings.whatsapp_recipients)
+        logger.info("sent %s card to %d recipient(s)", mode, count)
+
+    def _build(self, mode: str, date_label: str, now: dt.datetime) -> tuple[list, dict]:
         if mode == "preview":
-            return self._football.upcoming_fixtures(now)
-        key = self._settings.youtube_api_key
-        return [
-            replace(r, highlights_url=highlights_url(r.home, r.away, key))
-            for r in self._football.recent_results(now)
-        ]
+            fixtures = self._football.upcoming_fixtures(now)
+            standings = self._football.standings(_group_labels(fixtures))
+            enrich = self._writer.enrich_preview(fixtures)
+            return fixtures, build_preview_card(date_label, fixtures, standings, enrich)
+        results = self._football.recent_results(now)
+        standings = self._football.standings(_group_labels(results))
+        enrich = self._writer.enrich_recap(results)
+        return results, build_recap_card(date_label, results, standings, enrich)
 
 
 def _group_labels(matches: list[Fixture] | list[MatchResult]) -> set[str]:

@@ -35,7 +35,6 @@ class MatchResult:
     score: str
     goals: list[Goal] = field(default_factory=list)
     group: str = ""
-    highlights_url: str = ""
 
 
 @dataclass(frozen=True)

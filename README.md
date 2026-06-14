@@ -1,93 +1,88 @@
 # ⚽ FIFA World Cup 2026 — WhatsApp Notifier
 
-Two free, hostless daily WhatsApp messages about WC 2026:
+Two free, hands-off daily WhatsApp **image cards** about WC 2026:
 
-- **🌙 9 PM IST — Tonight's Slate:** matches kicking off overnight (9 PM→11 AM IST), star players,
-  form/h2h/stakes one-liner, match-of-the-night, group standings, a fun fact.
-- **☀️ 11 AM IST — Morning Recap:** scores + **scorers** (with minutes, pens/OGs) from the matches
-  that finished while you slept, updated standings, and ▶️ highlight links.
+- **🌙 9 PM IST — Tonight's Slate:** tonight's matches (9 PM→11 AM IST window) with star players,
+  a form/h2h/stakes one-liner, match-of-the-night, group standings, and a fun fact.
+- **☀️ 11 AM IST — Morning Recap:** scores + **scorers** (minute, penalty/own-goal) from the
+  matches that finished overnight, updated standings, and a storyline.
 
-Each run sends **2 messages** (matches, then a monospace standings table). Minimal by design: a
-single Python package run by **GitHub Actions cron** — no server, no Docker. Match data comes from
-**ESPN's public API (no key)**; the narrative is written by **Gemini**; delivery uses the **Meta
-WhatsApp Cloud API** test number (no ban risk, free to verified numbers).
+Each run renders **one image card** and sends it via WhatsApp — images sidestep the text-template
+restrictions (no newlines/tables allowed in template text params) and look like a polished sports
+card. Minimal by design: a single Python package run by **GitHub Actions cron** — no server, no
+Docker. Match data: **ESPN's public API (no key)**. Narrative: **Gemini**. Delivery: **Meta
+WhatsApp Cloud API** (image-header template).
 
 ## How it works
 
 ```
 GitHub Actions cron ──> python main.py {preview|recap}
                               │
-                              └─ src/pipeline.py  (gather → compose → deliver)
-                                   ├─ clients/football.py   (ESPN: fixtures, scores, scorers, standings, venues)
-                                   ├─ clients/youtube.py    (highlight links)
-                                   ├─ clients/whatsapp.py   (Meta Cloud API send — one or more messages)
-                                   └─ services/content.py   (Gemini narrative + code-built standings table)
+                              └─ src/pipeline.py  (gather → enrich → render → deliver)
+                                   ├─ clients/football.py   ESPN: fixtures, scores, scorers, standings, venues
+                                   ├─ services/content.py   Gemini → structured enrichment (stars, one-liner, fun fact)
+                                   ├─ services/card.py       build card dict + render HTML→PNG (Playwright/Chromium)
+                                   │     └─ templates/card.html.j2 · services/flags.py (flag images)
+                                   └─ clients/whatsapp.py    upload PNG → send image template
 ```
 
 ## Project structure
 
 ```
 fifa-wc/
-├── main.py                 # entry point: python main.py {preview|recap} [--dry-run]
-├── prompts/                # LLM prompts as markdown (system + user per mode)
-│   ├── preview/{system,user}.md
-│   └── recap/{system,user}.md
+├── main.py                      # entry: python main.py {preview|recap} [--dry-run]
+├── prompts/{preview,recap}/{system,user}.md   # Gemini enrichment prompts
+├── templates/card.html.j2       # the card layout (HTML/CSS)
 └── src/
-    ├── config.py           # pydantic-settings (env vars / .env)
-    ├── models.py           # Fixture, Goal, MatchResult, GroupStanding, TeamStanding
-    ├── pipeline.py         # Notifier — orchestration
+    ├── config.py                # pydantic-settings (env / .env)
+    ├── models.py                # Fixture, Goal, MatchResult, GroupStanding, TeamStanding
+    ├── pipeline.py              # Notifier — orchestration
     ├── log.py
-    ├── clients/            # external I/O: ESPN data, WhatsApp, YouTube
-    └── services/           # prompt loading + content composition (Gemini)
+    ├── clients/                 # football.py (ESPN data), whatsapp.py (media upload + send)
+    └── services/                # content.py (Gemini), card.py (render), flags.py
 ```
 
 ## Setup
 
 ### 1. Keys
-- **Google AI Studio** — create `GEMINI_API_KEY` (only required key for content).
-- **(optional) YouTube Data API** — `YOUTUBE_API_KEY` for direct highlight-video links instead of
-  search URLs.
+- **Google AI Studio** — `GEMINI_API_KEY` (the only required key).
 - Match data: **none** — ESPN's public endpoints need no key.
 
 ### 2. WhatsApp Cloud API (free, no ban risk)
-1. Create a Meta app at developers.facebook.com → add the **WhatsApp** product → create a business
-   portfolio when prompted.
-2. Copy the **test number's Phone Number ID** (`WHATSAPP_PHONE_NUMBER_ID`).
-3. Add your number(s) as **verified recipients** (`WHATSAPP_RECIPIENT`, comma-separated for several).
-4. Create + get approved a **utility template** named `wc_update` whose body wraps a single
-   variable, e.g. `⚽\n{{1}}\n_FIFA World Cup 2026_` (a variable cannot be the only content, nor at
-   the very start/end). Match `WHATSAPP_TEMPLATE_LANG` to its language (`en_US`).
-5. Generate a **permanent System User access token** (the default expires in 24h) → `WHATSAPP_TOKEN`.
+1. Meta app → add **WhatsApp** product → create a business portfolio.
+2. Copy the test number's **Phone Number ID** (`WHATSAPP_PHONE_NUMBER_ID`); note the **WABA ID**
+   and **App ID** (needed once for the template).
+3. Add your number(s) as **verified recipients** (`WHATSAPP_RECIPIENT`, comma-separated).
+4. **Image template** `wc_card` (category MARKETING — correct for a digest; UTILITY is for
+   transactions only and Meta will reclassify/penalize otherwise): an `IMAGE` header + a short
+   static body, created via the API (the header example needs a `header_handle` from the
+   [Resumable Upload API](https://developers.facebook.com/docs/graph-api/guides/upload)). See
+   `scripts`/git history for the exact create call. Get it approved.
+5. Generate a **permanent System User token** → `WHATSAPP_TOKEN`.
 
-### 3. Run it on GitHub Actions
-1. Push to GitHub.
-2. Settings → Secrets and variables → Actions → add each variable from `.env.example`
-   (`GEMINI_API_KEY`, `WHATSAPP_*`, optional `YOUTUBE_API_KEY`/`GEMINI_MODEL`).
-3. Schedules in `.github/workflows/notify.yml` fire at 15:30 & 05:30 UTC (9 PM / 11 AM IST).
-   GitHub cron can drift 5–30 min under load.
-4. Test via **Actions → WC Notifier → Run workflow**.
+### 3. Run on GitHub Actions
+1. Push to GitHub. Add each `.env.example` variable as a repo secret.
+2. Schedules fire at 15:30 & 05:30 UTC (9 PM / 11 AM IST); the workflow installs Chromium +
+   an emoji font for rendering. Test via **Actions → WC Notifier → Run workflow**.
 
 ## Local testing
 
 ```bash
 uv sync
-cp .env.example .env        # fill in values (loaded automatically by pydantic-settings)
-uv run python main.py preview --dry-run   # prints the messages instead of sending
+uv run playwright install chromium      # one-time
+cp .env.example .env                     # fill in values
+uv run python main.py preview --dry-run  # renders samples/preview_card.png (no send)
 uv run python main.py recap --dry-run
 ```
 
-To send for real without an approved template: message your bot first (opens a 24h window), set
-`WHATSAPP_USE_TEMPLATE=false`, and free-form text delivers.
+To actually send without an approved template: message the bot first (opens a 24h window), set
+`WHATSAPP_USE_TEMPLATE=false`, and the image delivers free-form.
 
-## Notes & limits
-- **Template wrapper:** unprompted messages must use a template; its static wrapper appears on each
-  message. Keep it minimal (see step 4).
-- **Data:** ESPN provides scores, scorers, standings, and venues, current and free. Scorer/venue
-  fields populate as ESPN updates a match.
-- **Resilience:** Gemini calls retry transient errors, then fall back to a plain (still formatted)
-  layout so a message always goes out.
-
-## Roadmap (Phase 2)
-Interactive on-demand commands (`today`, `standings`, `group F`) via a free serverless webhook —
-the only piece that needs an always-on listener, intentionally kept out of v1. Direct YouTube
-highlight videos via the YouTube Data API key.
+## Notes
+- **Category:** a sports digest is MARKETING by Meta's definition; that's submitted intentionally.
+  Approval is Meta's manual queue (minutes to ~a day on an unverified test account).
+- **Data:** ESPN is current and free; scorer/venue fields populate as a match updates.
+- **Flags** render as images (flagcdn) so they're correct on any renderer; decorative emoji use a
+  color-emoji font (installed in CI).
+- **Resilience:** Gemini enrichment retries then degrades — the card still renders from ESPN data
+  alone if the LLM is unavailable.

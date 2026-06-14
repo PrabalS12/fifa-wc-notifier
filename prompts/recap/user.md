@@ -1,16 +1,5 @@
-Write the RECAP for $date.
+Last night's FIFA World Cup 2026 results (JSON):
 
-Begin with:
-☀️ *MORNING RECAP* — $date
-
-Then one block per match:
-<flag> *<Home> <score> <Away>* <flag>
-⚽ <home scorers> | <away scorers>
-▶️ <highlights_url>
-
-Then exactly:
-[[FACT]]
-🔥 <one storyline or fun fact>
-
-Data (JSON):
 $data
+
+Return one storyline sentence.

@@ -1,4 +1,4 @@
-"""Deliver a message via the Meta WhatsApp Cloud API."""
+"""Deliver an image card via the Meta WhatsApp Cloud API."""
 
 from __future__ import annotations
 
@@ -10,15 +10,27 @@ GRAPH = "https://graph.facebook.com/v25.0"
 
 
 class WhatsAppClient:
-    """Sends template or free-form messages through the Cloud API."""
+    """Uploads a PNG and sends it as a template (unprompted) or free-form image."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def send(self, messages: str | list[str]) -> list[dict]:
-        """Send each message to every recipient, in order. Raises on the first non-2xx."""
-        if isinstance(messages, str):
-            messages = [messages]
+    def upload_media(self, png: bytes, filename: str = "card.png") -> str:
+        """Upload PNG bytes to the Cloud API media store; returns a reusable media ID."""
+        s = self._settings
+        resp = requests.post(
+            f"{GRAPH}/{s.whatsapp_phone_number_id}/media",
+            headers={"Authorization": f"Bearer {s.whatsapp_token}"},
+            data={"messaging_product": "whatsapp", "type": "image/png"},
+            files={"file": (filename, png, "image/png")},
+            timeout=60,
+        )
+        if resp.status_code >= 300:
+            raise RuntimeError(f"WhatsApp media upload failed [{resp.status_code}]: {resp.text}")
+        return resp.json()["id"]
+
+    def send_image(self, media_id: str) -> list[dict]:
+        """Send the uploaded image to every recipient. Raises on the first non-2xx."""
         s = self._settings
         if not (s.whatsapp_token and s.whatsapp_phone_number_id and s.whatsapp_recipients):
             raise RuntimeError(
@@ -32,20 +44,20 @@ class WhatsAppClient:
         }
         responses = []
         for recipient in s.whatsapp_recipients:
-            for text in messages:
-                payload = self._payload(text, recipient)
-                resp = requests.post(url, headers=headers, json=payload, timeout=30)
-                if resp.status_code >= 300:
-                    raise RuntimeError(
-                        f"WhatsApp send to {recipient} failed [{resp.status_code}]: {resp.text}"
-                    )
-                responses.append(resp.json())
+            payload = self._payload(media_id, recipient)
+            resp = requests.post(url, headers=headers, json=payload, timeout=30)
+            if resp.status_code >= 300:
+                raise RuntimeError(
+                    f"WhatsApp send to {recipient} failed [{resp.status_code}]: {resp.text}"
+                )
+            responses.append(resp.json())
         return responses
 
-    def _payload(self, text: str, recipient: str) -> dict:
+    def _payload(self, media_id: str, recipient: str) -> dict:
         s = self._settings
         if s.whatsapp_use_template:
-            # Required for business-initiated (unprompted) messages outside the 24h window.
+            # Unprompted (outside 24h window) must use an approved template; the image goes in
+            # the header parameter, which has none of the text restrictions.
             return {
                 "messaging_product": "whatsapp",
                 "to": recipient,
@@ -54,13 +66,17 @@ class WhatsAppClient:
                     "name": s.whatsapp_template_name,
                     "language": {"code": s.whatsapp_template_lang},
                     "components": [
-                        {"type": "body", "parameters": [{"type": "text", "text": text}]}
+                        {
+                            "type": "header",
+                            "parameters": [{"type": "image", "image": {"id": media_id}}],
+                        }
                     ],
                 },
             }
+        # Free-form image — only delivers inside an open 24h window (used for testing).
         return {
             "messaging_product": "whatsapp",
             "to": recipient,
-            "type": "text",
-            "text": {"body": text},
+            "type": "image",
+            "image": {"id": media_id},
         }

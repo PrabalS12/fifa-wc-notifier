@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  #card {
+    width: 720px;
+    background: linear-gradient(160deg, #0b1f17 0%, #0e2a1e 55%, #11352a 100%);
+    color: #eaf3ee; padding: 34px 36px 28px; border-radius: 0;
+  }
+  .top { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 2px solid #1f6f4d; padding-bottom: 14px; }
+  .title { font-size: 30px; font-weight: 800; letter-spacing: .5px; }
+  .title .em { margin-right: 8px; }
+  .date { font-size: 17px; color: #9fc7b3; font-weight: 600; }
+  .motn { margin: 16px 0 6px; display: inline-block; background: #1f6f4d; color: #eafff4;
+          font-size: 14px; font-weight: 700; padding: 6px 14px; border-radius: 20px; }
+  .motn .lab { color: #b8ffd9; font-weight: 800; }
+
+  .match { padding: 16px 0; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .mh { display: flex; align-items: center; gap: 10px; font-size: 21px; font-weight: 800; }
+  .mh img { width: 30px; height: 20px; border-radius: 3px; object-fit: cover; box-shadow: 0 0 0 1px rgba(255,255,255,.15); }
+  .mh .vs { color: #7fd6a8; font-weight: 700; font-size: 16px; }
+  .mh .score { color: #ffd86b; font-weight: 900; font-size: 22px; }
+  .meta { font-size: 14px; color: #9fc7b3; margin-top: 5px; font-weight: 600; }
+  .stars { font-size: 14px; color: #cfe9dc; margin-top: 6px; font-style: italic; }
+  .note { font-size: 14px; color: #d7ece1; margin-top: 5px; line-height: 1.35; }
+  .scorers { font-size: 14px; color: #d7ece1; margin-top: 6px; line-height: 1.4; }
+  .scorers .ico { color: #7fd6a8; }
+
+  .standings { margin-top: 20px; }
+  .sh { font-size: 16px; font-weight: 800; color: #b8ffd9; margin: 14px 0 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: right; padding: 5px 6px; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: #7fa896; font-weight: 700; border-bottom: 1px solid rgba(255,255,255,.12); }
+  tbody td { border-bottom: 1px solid rgba(255,255,255,.05); }
+  tbody tr:first-child td { color: #fff; font-weight: 700; }
+  .pts { color: #ffd86b; font-weight: 800; }
+
+  .fact { margin-top: 20px; background: rgba(255,255,255,.06); border-left: 3px solid #ffd86b;
+          padding: 12px 14px; border-radius: 6px; font-size: 14px; color: #eaf3ee; line-height: 1.4; }
+  .foot { margin-top: 18px; text-align: center; font-size: 12px; color: #6f9a85; font-weight: 700; letter-spacing: 1px; }
+</style>
+</head>
+<body>
+<div id="card">
+  <div class="top">
+    <div class="title"><span class="em">{{ emoji }}</span>{{ title }}</div>
+    <div class="date">{{ date }}</div>
+  </div>
+
+  {% if match_of_night %}<div class="motn"><span class="lab">🔥 MATCH OF THE NIGHT</span> &nbsp;{{ match_of_night }}</div>{% endif %}
+
+  {% for m in matches %}
+  <div class="match">
+    <div class="mh">
+      {% if m.home_flag %}<img src="{{ m.home_flag }}">{% endif %}<span>{{ m.home }}</span>
+      {% if m.score %}<span class="score">{{ m.score }}</span>{% else %}<span class="vs">vs</span>{% endif %}
+      <span>{{ m.away }}</span>{% if m.away_flag %}<img src="{{ m.away_flag }}">{% endif %}
+    </div>
+    {% if m.meta %}<div class="meta">{{ m.meta }}</div>{% endif %}
+    {% if m.stars %}<div class="stars">⭐ {{ m.stars }}</div>{% endif %}
+    {% if m.note %}<div class="note">{{ m.note }}</div>{% endif %}
+    {% if m.scorers %}<div class="scorers"><span class="ico">⚽</span> {{ m.scorers }}</div>{% endif %}
+  </div>
+  {% endfor %}
+
+  {% if groups %}
+  <div class="standings">
+    {% for g in groups %}
+    <div class="sh">📊 {{ g.name }}</div>
+    <table>
+      <thead><tr><th>Team</th><th>Pl</th><th>GD</th><th>Pts</th></tr></thead>
+      <tbody>
+        {% for r in g.rows %}
+        <tr><td>{{ r.team }}</td><td>{{ r.pl }}</td><td>{{ r.gd }}</td><td class="pts">{{ r.pts }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if fact %}<div class="fact">{{ fact }}</div>{% endif %}
+  <div class="foot">FIFA WORLD CUP 2026 · DAILY UPDATE</div>
+</div>
+</body>
+</html>
