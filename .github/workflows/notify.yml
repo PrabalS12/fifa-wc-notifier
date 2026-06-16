@@ -1,9 +1,9 @@
 name: WC Notifier
 
+# Triggered by cron-job.org via the workflow_dispatch REST API at 15:30 & 05:30 UTC
+# (9 PM / 11 AM IST). GitHub's native `schedule:` cron was dropped because it
+# delayed runs by hours and skipped slots; dispatched runs fire immediately.
 on:
-  schedule:
-    - cron: "30 15 * * *"   # 21:00 IST -> preview (tonight's slate)
-    - cron: "30 5 * * *"    # 11:00 IST -> recap (last night's results)
   workflow_dispatch:
     inputs:
       mode:
